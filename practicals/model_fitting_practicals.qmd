@@ -1,6 +1,7 @@
 ---
 title: "Fitting epidemics models in R"
 date: "2025-09-02"
+author: "James Mba Azam, PhD"
 format:
   html:
     theme:
