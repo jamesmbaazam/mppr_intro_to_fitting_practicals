@@ -13,28 +13,34 @@ execute:
   message: false
   cache: true
 engine: knitr
+editor: 
+  markdown: 
+    wrap: 72
 ---
 
 ## Learning Objectives
 
 By the end of this tutorial, you will be able to:
 
-- Understand the basic principles of the SIR epidemic model and its parameters
-- Fit epidemic models to data using least squares estimation
-- Fit epidemic models using maximum likelihood estimation
-- Interpret model parameters in biological and epidemiological terms
-- Assess model fit and parameter uncertainty
-- Apply these methods to real outbreak data
+-   Understand the basic principles of the SIR epidemic model and its
+    parameters
+-   Fit epidemic models to data using least squares estimation
+-   Fit epidemic models using maximum likelihood estimation
+-   Interpret model parameters in biological and epidemiological terms
+-   Assess model fit and parameter uncertainty
+-   Apply these methods to real outbreak data
 
 ## Prerequisites
 
 This tutorial assumes familiarity with:
 
-- Basic R programming (data manipulation, plotting, functions)
-- Elementary statistics (probability distributions, optimization)
-- Basic calculus (understanding of derivatives and differential equations)
+-   Basic R programming (data manipulation, plotting, functions)
+-   Elementary statistics (probability distributions, optimization)
+-   Basic calculus (understanding of derivatives and differential
+    equations)
 
 **Required R packages:**
+
 ```{r setup, include=FALSE}
 # Load required packages
 library(tidyverse)
@@ -45,41 +51,55 @@ library(scales)
 
 ## Introduction
 
-In this tutorial, we will fit a deterministic SIR model to data on an outbreak of flu in a British boarding school. The SIR model is one of the most fundamental models in mathematical epidemiology, describing how infectious diseases spread through a population.
+In this tutorial, we will fit a deterministic SIR model to data on an
+outbreak of flu in a British boarding school. The SIR model is one of
+the most fundamental models in mathematical epidemiology, describing how
+infectious diseases spread through a population.
 
 ### The SIR Model: A Brief Overview
 
 The SIR model divides a population into three compartments:
 
-- **S** (Susceptible): Individuals who can become infected
-- **I** (Infectious): Individuals who are currently infected and can transmit the disease
-- **R** (Recovered): Individuals who have recovered and are immune
+-   **S** (Susceptible): Individuals who can become infected
+-   **I** (Infectious): Individuals who are currently infected and can
+    transmit the disease
+-   **R** (Recovered): Individuals who have recovered and are immune
 
 The model is described by a system of ordinary differential equations:
 
-$$\frac{dS}{dt} = -\beta SI$$
-$$\frac{dI}{dt} = \beta SI - \gamma I$$
+$$\frac{dS}{dt} = -\beta SI$$ $$\frac{dI}{dt} = \beta SI - \gamma I$$
 $$\frac{dR}{dt} = \gamma I$$
 
 Where:
 
-- **$\beta$ (beta)** is the transmission rate: the rate at which susceptible individuals become infected per infected individual per unit time
-- **$\gamma$ (gamma)** is the recovery rate: the rate at which infected individuals recover (inverse of the infectious period)
+-   $\beta$ (beta) is the transmission rate: the rate at which
+    susceptible individuals become infected per infected individual per
+    unit time
+-   $\gamma$ (gamma) is the recovery rate: the rate at which infected
+    individuals recover (inverse of the infectious period)
 
 ### Key Epidemiological Quantities
 
-From these parameters, we can derive important epidemiological quantities:
+From these parameters, we can derive important epidemiological
+quantities:
 
-- **Basic reproduction number**: $R_0 = \frac{\beta}{\gamma}$ - the average number of secondary infections caused by one infected individual in a fully susceptible population
-- **Effective reproduction number**: $R_t = R_0 \times \frac{S(t)}{N}$ - the reproduction number at time $t$, accounting for the proportion of susceptibles
+-   **Basic reproduction number**: $R_0 = \frac{\beta}{\gamma}$ - the
+    average number of secondary infections caused by one infected
+    individual in a fully susceptible population
+-   **Effective reproduction number**:
+    $R_t = R_0 \times \frac{S(t)}{N}$ - the reproduction number at time
+    $t$, accounting for the proportion of susceptibles
 
 ### The Data: 1978 Influenza Outbreak
 
-Our data comes from a 1978 influenza outbreak at a British boarding school with 763 students. The outbreak lasted 14 days, with cases recorded daily. This dataset is particularly valuable because:
+Our data comes from a 1978 influenza outbreak at a British boarding
+school with 763 students. The outbreak lasted 14 days, with cases
+recorded daily. This dataset is particularly valuable because:
 
-- The population is well-defined and closed (no births, deaths, or migration)
-- The outbreak was well-documented with daily case counts
-- The short duration makes it ideal for fitting simple epidemic models
+-   The population is well-defined and closed (no births, deaths, or
+    migration)
+-   The outbreak was well-documented with daily case counts
+-   The short duration makes it ideal for fitting simple epidemic models
 
 ```{r}
 # Load and prepare the data
@@ -101,51 +121,61 @@ ggplot(data = flu, aes(x = day, y = flu)) +
 
 ### Model Assumptions and Limitations
 
-Before fitting the model, it's important to understand the assumptions we're making:
+Before fitting the model, it's important to understand the assumptions
+we're making:
 
-**SIR Model Assumptions:**
-- **Homogeneous mixing**: All individuals have equal probability of contact with each other
-- **Constant population**: No births, deaths, or migration during the outbreak
-- **Perfect immunity**: Recovered individuals cannot be reinfected
-- **No latent period**: Individuals become infectious immediately upon infection
-- **Constant parameters**: $\beta$ and $\gamma$ do not change over time
+**SIR Model Assumptions:** - **Homogeneous mixing**: All individuals
+have equal probability of contact with each other - **Constant
+population**: No births, deaths, or migration during the outbreak -
+**Perfect immunity**: Recovered individuals cannot be reinfected - **No
+latent period**: Individuals become infectious immediately upon
+infection - **Constant parameters**: $\beta$ and $\gamma$ do not change
+over time
 
-**Data Assumptions:**
-- **Perfect reporting**: All cases are observed and reported
-- **Immediate detection**: Cases are detected as soon as they become symptomatic
-- **No asymptomatic cases**: All infections result in observable symptoms
+**Data Assumptions:** - **Perfect reporting**: All cases are observed
+and reported - **Immediate detection**: Cases are detected as soon as
+they become symptomatic - **No asymptomatic cases**: All infections
+result in observable symptoms
 
-These assumptions may not hold perfectly in reality, but they provide a useful starting point for model fitting.
+These assumptions may not hold perfectly in reality, but they provide a
+useful starting point for model fitting.
 
 ## Fitting continuous-time models to data: trajectory matching with least squares
 
-We start with one of the simplest approaches: least squares estimation. This method finds parameter values that minimize the sum of squared differences between observed data and model predictions.
+We start with one of the simplest approaches: least squares estimation.
+This method finds parameter values that minimize the sum of squared
+differences between observed data and model predictions.
 
 ### Understanding Least Squares
 
-**What is least squares?**
-Least squares assumes that the only source of variability is measurement error, which is:
+**What is least squares?** Least squares assumes that the only source of
+variability is measurement error, which is:
 
-- Symmetrically distributed around the true value
-- Has constant variance (homoscedastic)
-- Is independent between observations
+-   Symmetrically distributed around the true value
+-   Has constant variance (homoscedastic)
+-   Is independent between observations
 
 Under these assumptions, least squares provides:
 
-- **Unbiased estimates** of model parameters
-- **Minimum variance** among all unbiased estimators
-- **Maximum likelihood estimates** when errors are normally distributed
+-   **Unbiased estimates** of model parameters
+-   **Minimum variance** among all unbiased estimators
+-   **Maximum likelihood estimates** when errors are normally
+    distributed
 
 **Why use least squares?**
 
-- **Getting initial values**: Provides good starting points for more sophisticated methods
-- **Discovering deviations**: Residuals can reveal model inadequacies
-- **Computational simplicity**: Easy to implement and understand
-- **Robustness**: Works reasonably well even when assumptions are slightly violated
+-   **Getting initial values**: Provides good starting points for more
+    sophisticated methods
+-   **Discovering deviations**: Residuals can reveal model inadequacies
+-   **Computational simplicity**: Easy to implement and understand
+-   **Robustness**: Works reasonably well even when assumptions are
+    slightly violated
 
 ### Defining the SIR Model
 
-Let's define the SIR model as a system of ordinary differential equations:
+Let's define the SIR model as a system of ordinary differential
+equations:
+
 ```{r}
 # Define the SIR model as a function for deSolve
 sir_model <- function(t, y, params) {
@@ -167,7 +197,9 @@ sir_model <- function(t, y, params) {
 
 ### Creating the Objective Function
 
-Now we set up a function that calculates the sum of squared differences between the observations and the model predictions. This is our objective function that we want to minimize.
+Now we set up a function that calculates the sum of squared differences
+between the observations and the model predictions. This is our
+objective function that we want to minimize.
 
 ```{r}
 # Load the deSolve package for solving differential equations
@@ -207,27 +239,38 @@ sse_sir <- function(params0, data) {
 
 **Key points about this function:**
 
-- **Initial conditions**: We assume 762 susceptibles, 1 infectious individual (the index case), and 0 recovered
-- **Time points**: We simulate the model at the same time points where we have observations
-- **Numerical integration**: The `hmax = 1/120` parameter controls the step size for solving the differential equations
-- **Objective function**: We return the sum of squared errors, which we want to minimize
+-   **Initial conditions**: We assume 762 susceptibles, 1 infectious
+    individual (the index case), and 0 recovered
+-   **Time points**: We simulate the model at the same time points where
+    we have observations
+-   **Numerical integration**: The `hmax = 1/120` parameter controls the
+    step size for solving the differential equations
+-   **Objective function**: We return the sum of squared errors, which
+    we want to minimize
 
 ### Exploring Parameter Space
 
-Now, let's see how this function works by exploring different parameter values. 
+Now, let's see how this function works by exploring different parameter
+values.
 
-To start, we'll fix $\gamma$ (the recovery rate) and explore different values of $\beta$ (the transmission rate).
+To start, we'll fix $\gamma$ (the recovery rate) and explore different
+values of $\beta$ (the transmission rate).
 
-**Why fix $\gamma$ first?**
-Individuals infected with flu typically are infectious for roughly 1 day prior to presenting with symptoms. In this case, we may suspect that sick individuals were immediately removed from interacting with susceptible individuals as soon as they were detected. Therefore, for current purposes we assume $\gamma = 1$ (meaning the infectious period is 1 day).
+**Why fix** $\gamma$ first? Individuals infected with flu typically are
+infectious for roughly 1 day prior to presenting with symptoms. In this
+case, we may suspect that sick individuals were immediately removed from
+interacting with susceptible individuals as soon as they were detected.
+Therefore, for current purposes we assume $\gamma = 1$ (meaning the
+infectious period is 1 day).
 
 **Exploring the objective function:**
 
-We'll create a grid of parameter values and evaluate our objective function at each point. This will help us understand:
+We'll create a grid of parameter values and evaluate our objective
+function at each point. This will help us understand:
 
-- The shape of the objective function
-- Where the minimum might be located
-- Whether there are multiple local minima
+-   The shape of the objective function
+-   Where the minimum might be located
+-   Whether there are multiple local minima
 
 ```{r}
 # Create a data frame to store parameter combinations and their SSE values
@@ -256,29 +299,36 @@ ggplot(data = sse_example, aes(x = beta, y = sse)) +
 
 ### Interpreting the Results
 
-From the plot, we can see that there is a clear minimum in the sum of squared errors, indicating that there is an optimal value of $\beta$ that best fits our data.
+From the plot, we can see that there is a clear minimum in the sum of
+squared errors, indicating that there is an optimal value of $\beta$
+that best fits our data.
 
 **Key observations:**
 
-- The SSE decreases as $\beta$ increases from very small values
-- There's a clear minimum around $\hat{\beta} \approx 0.003$
-- The function is well-behaved (smooth, single minimum)
+-   The SSE decreases as $\beta$ increases from very small values
+-   There's a clear minimum around $\hat{\beta} \approx 0.003$
+-   The function is well-behaved (smooth, single minimum)
 
-**Limitations of this approach:**
-1. **Imprecise location**: The exact location of the minimum isn't precisely determined from this grid search
-2. **Fixed $\gamma$ assumption**: Our estimate is only valid if $\gamma = 1$ is correct, but this was just an approximation
+**Limitations of this approach:** 1. **Imprecise location**: The exact
+location of the minimum isn't precisely determined from this grid search
+2. **Fixed** $\gamma$ assumption: Our estimate is only valid if
+$\gamma = 1$ is correct, but this was just an approximation
 
 ### Moving to Numerical Optimization
 
-To solve these problems, we need to:
-1. **Fit both parameters simultaneously**: Find the minimum of a 2D surface in ($\beta$, $\gamma$) space
-2. **Use numerical optimization**: Employ algorithms that can find precise minima
+To solve these problems, we need to: 1. **Fit both parameters
+simultaneously**: Find the minimum of a 2D surface in ($\beta$,
+$\gamma$) space 2. **Use numerical optimization**: Employ algorithms
+that can find precise minima
 
-This process is called **optimization**, and R provides robust algorithms for this purpose. The `optim()` function uses the Nelder-Mead algorithm by default, which is well-suited for this type of problem.
+This process is called **optimization**, and R provides robust
+algorithms for this purpose. The `optim()` function uses the Nelder-Mead
+algorithm by default, which is well-suited for this type of problem.
 
 ### Using the optim() Function
 
-Let's examine the `optim()` function and then use it to find the best fit parameters.
+Let's examine the `optim()` function and then use it to find the best
+fit parameters.
 
 ```{r}
 # Look at the help file for optim()
@@ -287,17 +337,19 @@ Let's examine the `optim()` function and then use it to find the best fit parame
 
 **Key arguments of `optim()`:**
 
-- `par`: Initial values for the parameters to be optimized
-- `fn`: The function to be minimized (our SSE function)
-- `data`: Additional data to pass to the function
-- `method`: The optimization algorithm to use (default is "Nelder-Mead")
+-   `par`: Initial values for the parameters to be optimized
+-   `fn`: The function to be minimized (our SSE function)
+-   `data`: Additional data to pass to the function
+-   `method`: The optimization algorithm to use (default is
+    "Nelder-Mead")
 
 **Why run optim() twice?**
 
-We run the optimization twice to ensure convergence to the global minimum:
+We run the optimization twice to ensure convergence to the global
+minimum:
 
-1. First run: Uses our initial guess
-2. Second run: Uses the result from the first run as the starting point
+1.  First run: Uses our initial guess
+2.  Second run: Uses the result from the first run as the starting point
 
 ```{r}
 # Set initial parameter values ($\beta$, $\gamma$)
@@ -316,7 +368,8 @@ print(fit1$par)
 
 ### Visualizing the Fitted Model
 
-Now let's simulate the model with our best-fit parameters and compare it to the observed data.
+Now let's simulate the model with our best-fit parameters and compare it
+to the observed data.
 
 ```{r}
 # Create fine time grid for smooth model simulation
@@ -349,109 +402,148 @@ ggplot(data = flu, aes(x = day, y = flu)) +
 
 **Parameter estimates:**
 
-- **$\beta$ (transmission rate)**: `r round(fit1$par[1], 4)` per day
-- **$\gamma$ (recovery rate)**: `r round(fit1$par[2], 4)` per day
+-   $\beta$ (transmission rate): `r round(fit1$par[1], 4)` per day
+-   $\gamma$ (recovery rate): `r round(fit1$par[2], 4)` per day
 
 **Biological interpretation:**
 
-- **Infectious period**: `r round(1/fit1$par[2], 1)` days (1/$\gamma$)
-- **Model fit**: The red line shows how well our fitted SIR model captures the observed epidemic curve
+-   **Infectious period**: `r round(1/fit1$par[2], 1)` days (1/$\gamma$)
+-   **Model fit**: The red line shows how well our fitted SIR model
+    captures the observed epidemic curve
 
 ### Limitations of Least Squares
 
-While least squares is a useful starting point, it has several limitations:
+While least squares is a useful starting point, it has several
+limitations:
 
 **Statistical limitations:**
 
-- **Arbitrary objective function**: Why minimize squared errors rather than absolute errors or other measures?
-- **No uncertainty quantification**: We get point estimates but no confidence intervals or measures of parameter uncertainty
-- **Assumption violations**: Real data often don't meet the assumptions of constant variance and normal errors
+-   **Arbitrary objective function**: Why minimize squared errors rather
+    than absolute errors or other measures?
+-   **No uncertainty quantification**: We get point estimates but no
+    confidence intervals or measures of parameter uncertainty
+-   **Assumption violations**: Real data often don't meet the
+    assumptions of constant variance and normal errors
 
 **Practical limitations:**
 
-- **Parameter identifiability**: Multiple parameter combinations may produce similar model fits
-- **Sensitivity to outliers**: A few extreme observations can strongly influence the fit
-- **No probabilistic framework**: Doesn't provide a statistical framework for model comparison
+-   **Parameter identifiability**: Multiple parameter combinations may
+    produce similar model fits
+-   **Sensitivity to outliers**: A few extreme observations can strongly
+    influence the fit
+-   **No probabilistic framework**: Doesn't provide a statistical
+    framework for model comparison
 
 **When least squares is appropriate:**
 
-- Getting initial parameter estimates for more sophisticated methods
-- Quick exploratory analysis
-- When measurement error is the primary source of variability
-- When computational simplicity is important
+-   Getting initial parameter estimates for more sophisticated methods
+-   Quick exploratory analysis
+-   When measurement error is the primary source of variability
+-   When computational simplicity is important
 
-In the next section, we'll explore maximum likelihood estimation, which addresses many of these limitations by providing a principled statistical framework.
+In the next section, we'll explore maximum likelihood estimation, which
+addresses many of these limitations by providing a principled
+statistical framework.
 
 ## Exercises: Least Squares Estimation
 
 ### Exercise 1: Parameter Sensitivity Analysis
 
-- How do the fitted parameters change when you assume different numbers of initial infectious individuals? What does this tell you about the importance of knowing initial conditions?
+-   How do the fitted parameters change when you assume different
+    numbers of initial infectious individuals? What does this tell you
+    about the importance of knowing initial conditions?
 
-- Fix $\gamma$ at different values (0.5, 1.0, 1.5) and refit $\beta$. How does this affect the estimated transmission rate?
-- Try different initial parameter values for `optim()`. Do you always get the same solution? What does this tell you about the optimization routine?
-- Calculate residuals (observed - predicted) for the fitted model. Plot residuals vs. time. Are there any patterns that suggest model inadequacy?
-- Fit the model to log-transformed case counts. How does this change the parameter estimates? What are the trade-offs of this approach?
+-   Fix $\gamma$ at different values (0.5, 1.0, 1.5) and refit $\beta$.
+    How does this affect the estimated transmission rate?
+
+-   Try different initial parameter values for `optim()`. Do you always
+    get the same solution? What does this tell you about the
+    optimization routine?
+
+-   Calculate residuals (observed - predicted) for the fitted model.
+    Plot residuals vs. time. Are there any patterns that suggest model
+    inadequacy?
+
+-   Fit the model to log-transformed case counts. How does this change
+    the parameter estimates? What are the trade-offs of this approach?
 
 ## Fitting continuous-time models to data: trajectory matching with Maximum Likelihood
 
-Maximum likelihood estimation (MLE) provides a more principled and robust approach to fitting models to data than least squares. It's based on a probabilistic framework that allows us to quantify uncertainty and make statistical inferences.
+Maximum likelihood estimation (MLE) provides a more principled and
+robust approach to fitting models to data than least squares. It's based
+on a probabilistic framework that allows us to quantify uncertainty and
+make statistical inferences.
 
 ### Understanding Maximum Likelihood
 
-**What is maximum likelihood?**
-Maximum likelihood finds the parameter values that make the observed data most probable under the assumed model. It's based on the likelihood function:
+**What is maximum likelihood?** Maximum likelihood finds the parameter
+values that make the observed data most probable under the assumed
+model. It's based on the likelihood function:
 
 $$L(\theta) = \prod_{i=1}^{n} f(y_i | \theta)$$
 
-Where:
-- $L(\theta)$ is the likelihood function
-- $\theta$ represents the model parameters
-- $f(y_i | \theta)$ is the probability density function for observation $i$
-- The product is over all $n$ observations
+Where: - $L(\theta)$ is the likelihood function - $\theta$ represents
+the model parameters - $f(y_i | \theta)$ is the probability density
+function for observation $i$ - The product is over all $n$ observations
 
 **Why use maximum likelihood?**
 
-- **Principled approach**: Based on probability theory and statistical inference
-- **Uncertainty quantification**: Provides confidence intervals and standard errors
-- **Model comparison**: Enables formal statistical tests between models
-- **Flexibility**: Can incorporate different probability distributions for the data
+-   **Principled approach**: Based on probability theory and statistical
+    inference
+-   **Uncertainty quantification**: Provides confidence intervals and
+    standard errors
+-   **Model comparison**: Enables formal statistical tests between
+    models
+-   **Flexibility**: Can incorporate different probability distributions
+    for the data
 
 ### Steps in Maximum Likelihood Estimation
 
-1. **Specify the probability distribution** for the observations
-2. **Write the likelihood function** as a function of model parameters
-3. **Take the log** and negate to get the negative log-likelihood (easier to work with)
-4. **Minimize the negative log-likelihood** using numerical optimization
-5. **Extract parameter estimates** and their uncertainties
+1.  **Specify the probability distribution** for the observations
+2.  **Write the likelihood function** as a function of model parameters
+3.  **Take the log** and negate to get the negative log-likelihood
+    (easier to work with)
+4.  **Minimize the negative log-likelihood** using numerical
+    optimization
+5.  **Extract parameter estimates** and their uncertainties
 
 ### Choosing a Probability Distribution
 
-For our epidemic data, we need to specify how the observed case counts are distributed around the model predictions. We'll assume the observations follow a **Poisson distribution**, which is appropriate for count data.
+For our epidemic data, we need to specify how the observed case counts
+are distributed around the model predictions. We'll assume the
+observations follow a **Poisson distribution**, which is appropriate for
+count data.
 
 **Why Poisson distribution?**
 
-- **Count data**: We're observing discrete numbers of cases
-- **Variance scaling**: The variance increases with the mean (realistic for epidemic data)
-- **Non-negative**: Poisson only produces non-negative values
-- **Simple**: Has only one parameter (the mean)
+-   **Count data**: We're observing discrete numbers of cases
+-   **Variance scaling**: The variance increases with the mean
+    (realistic for epidemic data)
+-   **Non-negative**: Poisson only produces non-negative values
+-   **Simple**: Has only one parameter (the mean)
 
 **Parameter transformation:**
 
-Since $\beta$ and $\gamma$ must be positive, we'll use log-transformed parameters:
+Since $\beta$ and $\gamma$ must be positive, we'll use log-transformed
+parameters:
 
-- $\beta = e^b$ where $b$ can be any real number
-- $\gamma = e^g$ where $g$ can be any real number
+-   $\beta = e^b$ where $b$ can be any real number
+-   $\gamma = e^g$ where $g$ can be any real number
 
-This transformation helps numerical optimization algorithms work more effectively.
+This transformation helps numerical optimization algorithms work more
+effectively.
 
-:::{.callout-note}
+::: callout-note
 The Poisson assumption means we're modeling the observed case counts as:
-$$Y_i \sim \text{Poisson}(\lambda_i)$$
-where $\lambda_i$ is the model prediction for time $i$. This accounts for the natural variability in case reporting and the discrete nature of the data.
+$$Y_i \sim \text{Poisson}(\lambda_i)$$ where $\lambda_i$ is the model
+prediction for time $i$. This accounts for the natural variability in
+case reporting and the discrete nature of the data.
 :::
 
-First, let's write a function to simulate the model given some combination of parameters. This is the same function we used in the least squares approach.
+First, let's write a function to simulate the model given some
+combination of parameters. This is the same function we used in the
+least squares approach.
+
 ```{r}
 sir_model <- function(t, x, params) {
   with(as.list(c(x, params)), {
@@ -463,7 +555,9 @@ sir_model <- function(t, x, params) {
 }
 ```
 
-Now let's write a function to return the negative log-likelihood of the data, given some combination of parameters. We will use the `dpois` function from the `stats` package to calculate the Poisson likelihood.
+Now let's write a function to return the negative log-likelihood of the
+data, given some combination of parameters. We will use the `dpois`
+function from the `stats` package to calculate the Poisson likelihood.
 
 ```{r}
 sir_nll <- function(b) {
@@ -493,9 +587,14 @@ fit0
 fit <- mle2(sir_nll, start = as.list(coef(fit0)))
 fit
 ```
+
 ### Exploring the likelihood
 
-We can get an idea about the uncertainty and in particular obtain confidence intervals using the profile likelihood. In `bbmle`, we can do this using the `profile` function. The `absVal = TRUE` argument ensures that the plot is on the absolute scale.
+We can get an idea about the uncertainty and in particular obtain
+confidence intervals using the profile likelihood. In `bbmle`, we can do
+this using the `profile` function. The `absVal = TRUE` argument ensures
+that the plot is on the absolute scale.
+
 ```{r}
 p <- profile(fit)
 plot(p, absVal = TRUE)
@@ -528,7 +627,11 @@ ggplot(data = flu, aes(x = day, y = flu)) +
   theme_minimal()
 ```
 
-Recalling that we obtained our parameter $b$ (and therefore the transmission rate $\beta$) assuming a particular value of $\gamma$, we wonder now how good this assumption was. Indeed, it is not hard to extend our approach to estimate $b$ and $g$ simultaneously, as follows.
+Recalling that we obtained our parameter $b$ (and therefore the
+transmission rate $\beta$) assuming a particular value of $\gamma$, we
+wonder now how good this assumption was. Indeed, it is not hard to
+extend our approach to estimate $b$ and $g$ simultaneously, as follows.
+
 ```{r}
 sir_model <- function(t, x, params) {
   with(as.list(c(x, params)), {
@@ -559,6 +662,7 @@ sir_nll <- function(b, g){
 ```
 
 As before, we pick some initial values and fit.
+
 ```{r}
 library(bbmle)
 params0 <- list(b = -6, g = -0.7)
@@ -570,12 +674,14 @@ fit
 ```
 
 We can now visualise the likelihood profiles
+
 ```{r}
 p <- profile(fit)
 plot(p, absVal = TRUE)
 ```
 
 Finally, we can plot the fitted model against the data.
+
 ```{r}
 dt <- seq(0, max(flu$day), by = 0.05)
 parms <- c(beta = unname(exp(coef(fit)[1])), gamma = unname(exp(coef(fit)[2])))
@@ -605,30 +711,31 @@ ggplot(data = flu, aes(x = day, y = flu)) +
 
 **Optimization convergence problems:**
 
-- **Issue**: `optim()` or `mle2()` fails to converge
-- **Solutions**: 
-  - Try different initial values
-  - Use different optimization methods
-  - Check for parameter bounds or constraints
-  - Verify the objective function is well-behaved
+-   **Issue**: `optim()` or `mle2()` fails to converge
+-   **Solutions**:
+    -   Try different initial values
+    -   Use different optimization methods
+    -   Check for parameter bounds or constraints
+    -   Verify the objective function is well-behaved
 
 **Parameter identifiability:**
 
-- **Issue**: Multiple parameter combinations give similar fits
-- **Solutions**:
-  - Use profile likelihood to assess parameter correlations
-  - Consider fixing one parameter based on external information
-  - Collect more data or different types of data
+-   **Issue**: Multiple parameter combinations give similar fits
+-   **Solutions**:
+    -   Use profile likelihood to assess parameter correlations
+    -   Consider fixing one parameter based on external information
+    -   Collect more data or different types of data
 
 **Model validation:**
 
-- **Residual analysis**: Check if residuals show patterns
-- **Goodness of fit**: Compare AIC/BIC for different models
-- **Sensitivity analysis**: Test robustness to initial conditions
+-   **Residual analysis**: Check if residuals show patterns
+-   **Goodness of fit**: Compare AIC/BIC for different models
+-   **Sensitivity analysis**: Test robustness to initial conditions
 
 ### Sensitivity to Initial Conditions
 
-The fitted parameters can be sensitive to assumptions about initial conditions. Let's explore this:
+The fitted parameters can be sensitive to assumptions about initial
+conditions. Let's explore this:
 
 ```{r}
 # Test sensitivity to initial infectious individuals
@@ -669,34 +776,55 @@ print(sensitivity_results)
 
 In this tutorial, we've learned how to:
 
-1. **Fit epidemic models to data** using both least squares and maximum likelihood methods
-2. **Interpret model parameters** in biological and epidemiological terms
-3. **Assess model fit** and parameter uncertainty
-4. **Understand the assumptions** underlying different fitting approaches
-5. **Recognize limitations** and practical considerations in model fitting
+1.  **Fit epidemic models to data** using both least squares and maximum
+    likelihood methods
+2.  **Interpret model parameters** in biological and epidemiological
+    terms
+3.  **Assess model fit** and parameter uncertainty
+4.  **Understand the assumptions** underlying different fitting
+    approaches
+5.  **Recognize limitations** and practical considerations in model
+    fitting
 
 ### Key Takeaways
 
-- **Least squares** is useful for initial exploration but has limitations for uncertainty quantification
-- **Maximum likelihood** provides a principled framework with uncertainty estimates
-- **Parameter interpretation** requires understanding both the mathematical model and biological context
-- **Model validation** is crucial for assessing the reliability of fitted parameters
-- **Sensitivity analysis** helps understand the robustness of results to assumptions
+-   **Least squares** is useful for initial exploration but has
+    limitations for uncertainty quantification
+-   **Maximum likelihood** provides a principled framework with
+    uncertainty estimates
+-   **Parameter interpretation** requires understanding both the
+    mathematical model and biological context
+-   **Model validation** is crucial for assessing the reliability of
+    fitted parameters
+-   **Sensitivity analysis** helps understand the robustness of results
+    to assumptions
 
 ### References
 
-- Ray Hilborn and Marc Mangel (1997). The Ecological Detective: Confronting Models with Data. Princeton University Press.
-- Keeling, M.J. and Rohani, P. (2008). Modeling Infectious Diseases in Humans and Animals. Princeton University Press.
-- Bolker, B. (2008). Ecological Models and Data in R. Princeton University Press.
+-   Ray Hilborn and Marc Mangel (1997). The Ecological Detective:
+    Confronting Models with Data. Princeton University Press.
+-   Keeling, M.J. and Rohani, P. (2008). Modeling Infectious Diseases in
+    Humans and Animals. Princeton University Press.
+-   Bolker, B. (2008). Ecological Models and Data in R. Princeton
+    University Press.
 
 ## Exercises
 
- - How do the fitted parameters change when you assume different numbers of initial infectious individuals?
-      - What does this tell you about the importance of knowing initial conditions?
- - Fix $\gamma$ at different values (0.5, 1.0, 1.5) and refit $\beta$
-      - How does this affect the estimated transmission rate?
- - Compare the parameter estimates from least squares vs. maximum likelihood. Which method gives more realistic parameter values?
- - Calculate residuals for both methods. Plot residuals vs. time to check for patterns. Which model fits better?
- - Try fitting with a negative binomial distribution instead of Poisson. How do the results change?
- - Fit an SEIR model (with exposed compartment) to the same data. Compare the fit to the SIR model.
- 
+-   How do the fitted parameters change when you assume different
+    numbers of initial infectious individuals?
+    -   What does this tell you about the importance of knowing initial
+        conditions?
+-   Fix $\gamma$ at different values (0.5, 1.0, 1.5) and refit $\beta$
+    -   How does this affect the estimated transmission rate?
+-   Compare the parameter estimates from least squares vs. maximum
+    likelihood. Which method gives more realistic parameter values?
+-   Calculate residuals for both methods. Plot residuals vs. time to
+    check for patterns. Which model fits better?
+-   Try fitting with a negative binomial distribution instead of
+    Poisson. How do the results change?
+-   Fit an SEIR model (with exposed compartment) to the same data.
+    Compare the fit to the SIR model.
+
+## Acknowledgements
+
+This tutorial is based on [materials](https://ms.mcmaster.ca/~bolker/eeid/2011_eco/EEID2011_Fitting.pdf) developed by [John M. Drake](https://daphnia.ecology.uga.edu/drakelab/) at the 2011 Ecology and Evolution of Infectious Diseases Conference.
